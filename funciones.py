@@ -5,6 +5,10 @@ import numpy as np
 import math
 from sklearn.model_selection import train_test_split
 
+RANDOM_STATE = 42
+np.random.seed(RANDOM_STATE)
+random.seed(RANDOM_STATE)
+
 def rating_average (ratings, NUM_ANIMES, u):
   acc = 0
   count = 0
@@ -59,7 +63,7 @@ def jmsd_similarity (ratings, NUM_ANIMES, MIN_RATING, MAX_RATING, u, v):
       r_u = (ratings[u][i] - MIN_RATING) / (MAX_RATING - MIN_RATING)
       r_v = (ratings[v][i] - MIN_RATING) / (MAX_RATING - MIN_RATING)
 
-      diff = (r_u - r_v) * (r_u - r_v)
+      diff += (r_u - r_v) * (r_u - r_v)
 
       intersection += 1
       union += 1
@@ -164,7 +168,7 @@ def get_recommendations (N, predictions):
 
 def has_test_ratings (test_ratings, NUM_ANIMES, u):
   for i in range(NUM_ANIMES):
-    if test_ratings[u][i] != np.nan:
+    if test_ratings[u][i] != None:
       return True
   return False
 
@@ -394,26 +398,43 @@ def get_ndcg (test_ratings, NUM_ANIMES, NUM_USERS, predictions, N):
 
 def preprocesar_dataframe_animes(dataframe_path,
                                  n_user_ratings, n_anime_ratings,
+                                 num_users=1000,
                                  test_size = 0.2, RANDOM_STATE = 42):
+    
+    # Hacemos el dataframe con el csv.
     df_ratings = pd.read_csv(dataframe_path, encoding='utf8')
 
+    # Filtramos ratings con -1
     df_ratings = df_ratings[df_ratings['rating'] != -1]    
     
+    # Filtramos usuarios con menos de n_user_ratings ratings y
+    # filtramos animes con menos de n_anime_ratings ratings.
     usuarios_utiles = df_ratings['user_id'].value_counts()[df_ratings['user_id'].value_counts() > n_user_ratings].index
     df_ratings = df_ratings[df_ratings['user_id'].isin(usuarios_utiles)]
     animes_utiles = df_ratings['anime_id'].value_counts()[df_ratings['anime_id'].value_counts() > n_anime_ratings].index
     df_ratings = df_ratings[df_ratings['anime_id'].isin(animes_utiles)]
     
+    # Muestreamos a la cantidad de usuarios que queramos y volvemos a filtrar pelis.
+    usuarios_unicos = df_ratings['user_id'].unique()
+    sampled_user_ids = np.random.choice(usuarios_unicos, size=num_users, replace=False)
+    df_ratings = df_ratings[df_ratings['user_id'].isin(sampled_user_ids)]
+    
+    animes_utiles = df_ratings['anime_id'].value_counts()[df_ratings['anime_id'].value_counts() > n_anime_ratings//2].index
+    df_ratings = df_ratings[df_ratings['anime_id'].isin(animes_utiles)]
+    
+    # Factorizamos.
     df_ratings['user_id'], user_codes = pd.factorize(df_ratings['user_id'])
     df_ratings['anime_id'], anime_codes = pd.factorize(df_ratings['anime_id'])
     df_ratings.reset_index(drop=True, inplace=True)
     
+    # Sacamos métricas globales.
     NUM_USERS = len(user_codes)
     NUM_ANIMES = len(anime_codes)
     MIN_RATING = df_ratings['rating'].min()
     MAX_RATING = df_ratings['rating'].max()
     SCORES = sorted(df_ratings.rating.unique())
     
+    # Dividimos en Train test
     train_df, test_df = train_test_split(df_ratings,
                                      test_size=test_size,          
                                      random_state=RANDOM_STATE,    
@@ -423,6 +444,7 @@ def preprocesar_dataframe_animes(dataframe_path,
     test_df = test_df[test_df['user_id'].isin(train_user_ids)]
     test_df = test_df[test_df['anime_id'].isin(train_anime_ids)]
     
+    # Hacemos las matrices
     ratings_train_matrix = [[None for _ in range(NUM_ANIMES)] for _ in range(NUM_USERS)]
     for _, row in train_df.iterrows():
         ratings_train_matrix[int(row.user_id)][int(row.anime_id)] = int(row.rating)
