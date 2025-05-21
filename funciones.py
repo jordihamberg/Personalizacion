@@ -372,7 +372,7 @@ def get_user_dcg (test_ratings, u, recommendations):
 def get_user_ndcg (test_ratings, u, predictions, N):
   recommendations = get_recommendations(N, predictions[u])
   dcg = get_user_dcg(test_ratings, u, recommendations)
-  idcg = get_user_idcg(u)
+  idcg = get_user_idcg(test_ratings, u)
   if idcg == 0:
     return 0
   else:
